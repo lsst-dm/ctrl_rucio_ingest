@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+  <bean id="rucioEventProcessor" class="org.lsst.process.rucio.RucioEventProcessor"/>
+
+  <camelContext xmlns="http://camel.apache.org/schema/spring">
+
+    <route id="rucioRouter">
+      <from uri="activemq:queue:events"/>
+      <process ref="rucioEventProcessor"/>
+      <choice>
+         <when>
+            <simple>${header.dstRse} == 'XRD1'</simple>
+            <to uri="kafka:XRD1?brokers=localhost:9092"/>
+         </when>
+         <when>
+            <simple>${header.dstRse} == 'XRD2'</simple>
+            <to uri="kafka:XRD2?brokers=localhost:9092"/>
+         </when>
+         <when>
+            <simple>${header.dstRse} == 'XRD3'</simple>
+            <to uri="kafka:XRD3?brokers=localhost:9092"/>
+         </when>
+        <otherwise>
+        </otherwise>
+      </choice>
+    </route>
+
+  </camelContext>
+
+  <!-- create a Camel ActiveMQ component to use, using the Spring bean style -->
+  <!-- we use the vm protocol to communicate intra-jvm which is much faster than tcp -->
+  <bean id="activemq" class="org.apache.camel.component.activemq.ActiveMQComponent">
+    <!-- the url to the remote ActiveMQ broker -->
+    <property name="brokerURL" value="tcp://localhost:61616"/>
+    <!-- The ActiveMQ Broker allows anonymous connection by default
+    <property name="userName" value="admin"/>
+    <property name="password" value="admin"/>
+    -->
+  </bean>
+
+</beans>
