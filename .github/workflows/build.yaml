@@ -31,11 +31,7 @@ jobs:
         HERMESK_ID=ghcr.io/${{ github.repository_owner }}/$HERMESK_NAME
 
         # Strip git ref prefix from version
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        # Strip "v" prefix from tag name
-        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-        # Use Docker `latest` tag convention
-        [ "$VERSION" == "main" ] && VERSION=latest
+        VERSION=$(cat docker/versions.env | grep RUCIO_DAEMONS_HERMESK_VERSION | sed 's/=/ /g'|cut -d " " -f2)
         echo HERMESK_ID=$HERMESK_ID
         echo VERSION=$VERSION
         docker tag $HERMESK_NAME $HERMESK_ID:$VERSION
