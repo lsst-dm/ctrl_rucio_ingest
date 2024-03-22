@@ -1,0 +1,12 @@
+version: "3.7"
+
+services:
+  rucio-daemons-hermesk:
+    platform: linux/x86_64
+    image: rucio-daemons-hermesk:${RUCIO_DAEMONS_HERMESK_VERSION}
+    build:
+      dockerfile: ./docker/rucio-daemons-hermesk/Dockerfile
+      context: ../
+      args:
+        - RUCIO_DAEMONS_VERSION
+        - CONFLUENT_KAFKA_VERSION
