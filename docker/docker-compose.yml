@@ -4,7 +4,7 @@ services:
   rucio-daemons-hermesk:
     container_name: rucio-daemons-hermesk
     platform: linux/x86_64
-    image: rucio-daemons-hermesk:${RUCIO_DAEMONS_HERMESK_VERSION}
+    image: rucio-daemons-hermesk
     build:
       dockerfile: ./docker/rucio-daemons-hermesk/Dockerfile
       context: ../
