@@ -1,0 +1,43 @@
+name: Build Rucio Hermes Kafka container
+on:
+  push:
+    tags:
+    - v*
+  pull_request:
+
+env:
+  INGESTD_NAME: rucio-daemons-hermesk
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Build ingest image
+      working-directory: docker
+      run: |
+        docker-compose -f "docker-compose.yml" --env-file versions.env build rucio-daemons-hermesk
+
+    - name: Log in to GitHub Container Registry
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+    - name: Push image
+      run: |
+        INGESTD_ID=ghcr.io/${{ github.repository_owner }}/$INGESTD_NAME
+
+        # Strip git ref prefix from version
+        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        # Strip "v" prefix from tag name
+        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+        # Use Docker `latest` tag convention
+        [ "$VERSION" == "main" ] && VERSION=latest
+        echo INGESTD_ID=$INGESTD_ID
+        echo VERSION=$VERSION
+        docker tag $INGESTD_NAME $INGESTD_ID:$VERSION
+        docker push $INGESTD_ID:$VERSION
+

@@ -1,0 +1,14 @@
+brokers: localhost:9092
+
+group_id: "my_test_group"
+    
+rses:
+    XRD1:
+        rucio_prefix: root://xrd1:1094//rucio/test
+        fs_prefix: file:///tmp
+    XRD2:
+        rucio_prefix: root://xrd2:1095//rucio/test
+        fs_prefix: file:///tmp
+    XRD3:
+        rucio_prefix: root://xrd3:1096//rucio/test
+        fs_prefix: file:///tmp
