@@ -95,7 +95,7 @@ def setup_kafka(logger):
         logger(logging.WARN, f'no message_filter specified, using "{default_filter_class_name}"')
         filter_name = default_filter_class_name
     else:
-        logger(logging.WARN, f'message_filter set to "{filter_name}"')
+        logger(logging.INFO, f'message_filter set to "{filter_name}"')
 
     # retrieve the topic list.
     topic_list = config_get_list(
@@ -109,8 +109,12 @@ def setup_kafka(logger):
         )
 
     # create the class used for message filtering
-    message_filter_class = create_class(filter_name)
-    message_filter = message_filter_class(logger, producer, topic_list)
+    message_filter = None
+    try:
+        message_filter_class = create_class(filter_name)
+        message_filter = message_filter_class(logger, producer, topic_list)
+    except Exception as e:
+        logging.exception(e)
 
     return message_filter
 

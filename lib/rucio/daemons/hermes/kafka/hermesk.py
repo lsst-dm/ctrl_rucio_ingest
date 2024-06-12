@@ -553,7 +553,7 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
        try:
            message_filter = setup_kafka(logger)
        except Exception as err:
-           logger(logging.ERROR, "Kafka NOT configured!")
+           logging.exception(err)
 
     worker_number, total_workers, logger = heartbeat_handler.live()
     message_dict = {}
