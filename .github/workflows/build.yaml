@@ -6,10 +6,6 @@ on:
   push:
     tags:
       - "*"
-  workflow_dispatch:
-    inputs:
-      context: docker
-      dockerfile: docker/Dockerfile
 
 env:
   HERMESK_NAME: rucio-daemons-hermesk
@@ -20,6 +16,9 @@ jobs:
     permissions:
       packages: write
       contents: read
+    inputs:
+      context: docker
+      dockerfile: docker/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v3
