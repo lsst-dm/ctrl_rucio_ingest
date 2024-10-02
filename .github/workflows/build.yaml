@@ -23,7 +23,7 @@ jobs:
       run: |
         docker compose -f "docker-compose.yml" --env-file versions.env build $HERMESK_NAME
 
-    - name: Log in to GitHub Container Registry
+    - name: Log in to GitHub Container Registry 
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
     - name: Push image
