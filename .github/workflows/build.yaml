@@ -1,14 +1,15 @@
 name: Build Rucio/Butler ingestd container
 
-"on":
+on:
   merge_group: {}
   pull_request: {}
   push:
     tags:
       - "*"
-inputs:
-  context: docker
-  dockerfile: docker/Dockerfile
+  workflow_dispatch:
+    inputs:
+      context: docker
+      dockerfile: docker/Dockerfile
 
 env:
   HERMESK_NAME: rucio-daemons-hermesk
