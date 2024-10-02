@@ -1,0 +1,38 @@
+name: Build Rucio/Butler ingestd container
+on:
+  push:
+    tags:
+    - v*
+  pull_request:
+
+env:
+  HERMESK_NAME: rucio-daemons-hermesk
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Build ingest image
+      working-directory: docker
+      run: |
+        docker compose -f "docker-compose.yml" --env-file versions.env build $HERMESK_NAME
+
+    - name: Log in to GitHub Container Registry 
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+    - name: Push image
+      run: |
+        HERMESK_ID=ghcr.io/${{ github.repository_owner }}/$HERMESK_NAME
+
+        # Strip git ref prefix from version
+        VERSION=$(cat docker/versions.env | grep RUCIO_DAEMONS_HERMESK_VERSION | sed 's/=/ /g'|cut -d " " -f2)
+        echo HERMESK_ID=$HERMESK_ID
+        echo VERSION=$VERSION
+        docker tag $HERMESK_NAME $HERMESK_ID:$VERSION
+        docker push $HERMESK_ID:$VERSION
