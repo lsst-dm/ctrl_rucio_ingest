@@ -6,10 +6,9 @@ name: Build Rucio/Butler ingestd container
   push:
     tags:
       - "*"
-  workflow_dispatch:
-    inputs:
-      context: docker
-      dockerfile: docker/Dockerfile
+inputs:
+  context: docker
+  dockerfile: docker/Dockerfile
 
 env:
   HERMESK_NAME: rucio-daemons-hermesk
