@@ -22,8 +22,11 @@ class default:
         self.topics = topics
 
     def process(self, messages):
+        to_delete = set()
         for topic in self.topics:
-            self._process(topic, messages)
+            d = self._process(topic, messages)
+            to_delete = to_delete.union(d)
+        return list(to_delete)
 
     def _process(self, topic, messages):
         to_delete = []
