@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright European Organization for Nuclear Research (CERN) since 2012
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 """
-   Hermesk is a daemon that get the messages and sends them to external services (influxDB, ES, ActiveMQ, Kafka).
+   Hermes is a daemon that get the messages and sends them to external services (influxDB, ES, ActiveMQ).
 """
 
 import calendar
@@ -31,10 +30,11 @@ import threading
 import time
 from configparser import NoOptionError, NoSectionError
 from email.mime.text import MIMEText
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import requests
 import stomp
+from requests.auth import HTTPBasicAuth
 
 import rucio.db.sqla.util
 from rucio.common.config import (
@@ -51,10 +51,12 @@ from rucio.daemons.common import run_daemon
 from rucio.daemons.hermes.kafka.kafka_support import setup_kafka, deliver_to_kafka
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Iterable, Sequence
     from types import FrameType
-    from typing import Optional
 
+    from stomp.utils import Frame
+
+    from rucio.common.types import LoggerFunction
     from rucio.daemons.common import HeartbeatHandler
 
 logging.getLogger("requests").setLevel(logging.CRITICAL)
@@ -65,12 +67,12 @@ DAEMON_NAME = "hermesk"
 
 RECONNECT_COUNTER = METRICS.counter(
     name="reconnect.{host}",
-    documentation="Counts Hermesk reconnects to different brokers",
+    documentation="Counts Hermes reconnects to different ActiveMQ brokers",
     labelnames=("host",),
 )
 
 
-def default(datetype):
+def default(datetype: Union[datetime.date, datetime.datetime]) -> str:
     if isinstance(datetype, (datetime.date, datetime.datetime)):
         return datetype.isoformat()
 
@@ -80,20 +82,28 @@ class HermesListener(stomp.ConnectionListener):
     Hermes Listener
     """
 
-    def __init__(self, broker):
+    def __init__(self, broker: str):
         """
         __init__
         """
         self.__broker = broker
 
-    def on_error(self, frame):
+    def on_error(self, frame: "Frame") -> None:
         """
         Error handler
         """
         logging.error("[broker] [%s]: %s", self.__broker, frame.body)
 
 
-def setup_activemq(logger: "Callable"):
+def setup_activemq(
+        logger: "LoggerFunction"
+) -> tuple[
+    Optional[list[stomp.Connection12]],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[bool]
+]:
     """
     Deliver messages to ActiveMQ
 
@@ -150,6 +160,8 @@ def setup_activemq(logger: "Callable"):
 
     port = config_get_int("messaging-hermes", "port")
     vhost = config_get("messaging-hermes", "broker_virtual_host", raise_exception=False)
+    username = None
+    password = None
     if not use_ssl:
         username = config_get("messaging-hermes", "username")
         password = config_get("messaging-hermes", "password")
@@ -192,8 +204,14 @@ def setup_activemq(logger: "Callable"):
 
 
 def deliver_to_activemq(
-    messages, conns, destination, username, password, use_ssl, logger
-):
+    messages: "Iterable[dict[str, Any]]",
+    conns: "Sequence[stomp.Connection12]",
+    destination: str,
+    username: str,
+    password: str,
+    use_ssl: bool,
+    logger: "LoggerFunction"
+) -> list[str]:
     """
     Deliver messages to ActiveMQ
 
@@ -316,7 +334,10 @@ def deliver_to_activemq(
     return to_delete
 
 
-def deliver_emails(messages: list[dict], logger: "Callable") -> list:
+def deliver_emails(
+        messages: "Iterable[dict[str, Any]]",
+        logger: "LoggerFunction"
+) -> list[str]:
     """
     Sends emails
 
@@ -355,7 +376,11 @@ def deliver_emails(messages: list[dict], logger: "Callable") -> list:
     return to_delete
 
 
-def submit_to_elastic(messages: list[dict], endpoint: str, logger: "Callable") -> int:
+def submit_to_elastic(
+        messages: "Iterable[dict[str, Any]]",
+        endpoint: str,
+        logger: "LoggerFunction"
+) -> int:
     """
     Aggregate a list of message to ElasticSearch
 
@@ -366,23 +391,34 @@ def submit_to_elastic(messages: list[dict], endpoint: str, logger: "Callable") -
     :returns:                  HTTP status code. 200 and 204 OK. Rest is failure.
     """
     text = ""
+    elastic_username = config_get("hermes", "elastic_username",
+                                  raise_exception=False, default=None)
+    elastic_password = config_get("hermes", "elastic_password",
+                                  raise_exception=False, default=None)
+    auth = None
+    if elastic_username and elastic_password:
+        auth = HTTPBasicAuth(elastic_username, elastic_password)
+
     for message in messages:
         text += '{ "index":{ } }\n%s\n' % json.dumps(message, default=default)
     res = requests.post(
-        endpoint, data=text, headers={"Content-Type": "application/json"}
+        endpoint, data=text, headers={"Content-Type": "application/json"}, auth=auth
     )
     return res.status_code
 
 
 def aggregate_to_influx(
-    messages: list[dict], bin_size: int, endpoint: str, logger: "Callable"
+    messages: "Iterable[dict[str, Any]]",
+    bin_size: int,
+    endpoint: str,
+    logger: "LoggerFunction"
 ) -> int:
     """
     Aggregate a list of message using a certain bin_size
     and submit them to a InfluxDB endpoint
 
     :param messages:           The list of messages.
-    :param bin_size:           The size of the bins for the aggreagation (e.g. 10m, 1h, etc.).
+    :param bin_size:           The size of the bins for the aggregation (e.g. 10m, 1h, etc.).
     :param endpoint:           The InfluxDB endpoint were to send the messages.
     :param logger:             The logger object.
 
@@ -484,7 +520,7 @@ def aggregate_to_influx(
 
 def hermesk(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
     """
-    Creates a Hermesk Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ, Kafka)
+    Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
     The list of services need to be define in the config service in the hermes section.
     The list of endpoints need to be defined in rucio.cfg in the hermes section.
 
@@ -566,7 +602,6 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
         total_threads=total_workers,
     )
 
-    msg_num = 0
     to_delete = []
     if messages:
         for message in messages:
@@ -634,7 +669,7 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                     logger(
                         logging.ERROR,
                         "Failure to submit %s messages to elastic. Returned status: %s",
-                        len(message_dict["influx"]),
+                        len(message_dict["elastic"]),
                         state,
                     )
             except Exception as error:
@@ -664,10 +699,10 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                 messages_sent = deliver_to_activemq(
                     messages=message_dict["activemq"],
                     conns=conns,
-                    destination=destination,
-                    username=username,
-                    password=password,
-                    use_ssl=use_ssl,
+                    destination=destination,  # type: ignore (argument could be None)
+                    username=username,  # type: ignore (argument could be None)
+                    password=password,  # type: ignore (argument could be None)
+                    use_ssl=use_ssl,  # type: ignore (argument could be None)
                     logger=logger,
                 )
                 logger(
@@ -681,6 +716,7 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                         to_delete.append(message)
             except Exception as error:
                 logger(logging.ERROR, "Error sending to ActiveMQ : %s", str(error))
+
         if "kafka" in message_dict:
             t_time = time.time()
             try:
@@ -700,7 +736,6 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                 logger(logging.ERROR, "Error sending to Kafka : %s", str(error))
 
 
-
     logger(logging.INFO, "Deleting %s messages", len(to_delete))
     to_delete = [
         {
@@ -717,7 +752,7 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
     return must_sleep
 
 
-def stop(signum: "Optional[int]" = None, frame: "Optional[FrameType]" = None) -> None:
+def stop(signum: Optional[int] = None, frame: Optional["FrameType"] = None) -> None:
     """
     Graceful exit.
     """
@@ -733,14 +768,14 @@ def run(
     broker_timeout: int = 3,
 ) -> None:
     """
-    Starts up the hermesk threads.
+    Starts up the hermes threads.
     """
     setup_logging(process_name=DAEMON_NAME)
 
     if rucio.db.sqla.util.is_old_db():
         raise DatabaseException("Database was not updated, daemon won't start")
 
-    logging.info("starting hermesk threads")
+    logging.info("starting hermes threads")
     thread_list = [
         threading.Thread(
             target=hermesk,
