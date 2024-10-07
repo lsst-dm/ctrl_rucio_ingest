@@ -48,7 +48,6 @@ from rucio.common.logging import setup_logging
 from rucio.core.message import delete_messages, retrieve_messages
 from rucio.core.monitor import MetricManager
 from rucio.daemons.common import run_daemon
-from rucio.daemons.hermes.kafka.kafka_support import setup_kafka, deliver_to_kafka
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -63,7 +62,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 
 METRICS = MetricManager(module=__name__)
 graceful_stop = threading.Event()
-DAEMON_NAME = "hermesk"
+DAEMON_NAME = "hermes"
 
 RECONNECT_COUNTER = METRICS.counter(
     name="reconnect.{host}",
@@ -518,7 +517,7 @@ def aggregate_to_influx(
     return 204
 
 
-def hermesk(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
+def hermes(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
     """
     Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
     The list of services need to be define in the config service in the hermes section.
@@ -583,13 +582,6 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                 )
         except Exception as err:
             logger(logging.ERROR, str(err))
-
-    message_filter = None
-    if "kafka" in services_list:
-       try:
-           message_filter = setup_kafka(logger)
-       except Exception as err:
-           logging.exception(err)
 
     worker_number, total_workers, logger = heartbeat_handler.live()
     message_dict = {}
@@ -717,25 +709,6 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             except Exception as error:
                 logger(logging.ERROR, "Error sending to ActiveMQ : %s", str(error))
 
-        if "kafka" in message_dict:
-            t_time = time.time()
-            try:
-                messages_sent = deliver_to_kafka(
-                    message_filter=message_filter, messages=message_dict["kafka"]
-                )
-                logger(
-                    logging.INFO,
-                    "%s messages processed by Kafka filter in %s seconds",
-                    len(message_dict["kafka"]),
-                    time.time() - t_time,
-                )
-                for message in message_dict["kafka"]:
-                    if message["id"] in messages_sent:
-                        to_delete.append(message)
-            except Exception as error:
-                logger(logging.ERROR, "Error sending to Kafka : %s", str(error))
-
-
     logger(logging.INFO, "Deleting %s messages", len(to_delete))
     to_delete = [
         {
@@ -778,7 +751,7 @@ def run(
     logging.info("starting hermes threads")
     thread_list = [
         threading.Thread(
-            target=hermesk,
+            target=hermes,
             kwargs={
                 "once": once,
                 "bulk": bulk,

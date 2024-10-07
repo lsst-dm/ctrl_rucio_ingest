@@ -1,14 +1,5 @@
---- hermes.py	2023-12-06 08:29:24
-+++ hermesk.py	2024-09-30 13:36:40
-@@ -14,7 +14,7 @@
- # limitations under the License.
- 
- """
--   Hermes is a daemon that get the messages and sends them to external services (influxDB, ES, ActiveMQ).
-+   Hermesk is a daemon that get the messages and sends them to external services (influxDB, ES, ActiveMQ, Kafka).
- """
- 
- import calendar
+--- hermes.py	2024-10-04 11:48:58
++++ hermesk.py	2024-10-02 17:29:14
 @@ -48,6 +48,7 @@
  from rucio.core.message import delete_messages, retrieve_messages
  from rucio.core.monitor import MetricManager
@@ -16,8 +7,8 @@
 +from rucio.daemons.hermes.kafka.kafka_support import setup_kafka, deliver_to_kafka
  
  if TYPE_CHECKING:
-     from collections.abc import Callable
-@@ -60,11 +61,11 @@
+     from collections.abc import Iterable, Sequence
+@@ -62,7 +63,7 @@
  
  METRICS = MetricManager(module=__name__)
  graceful_stop = threading.Event()
@@ -26,49 +17,33 @@
  
  RECONNECT_COUNTER = METRICS.counter(
      name="reconnect.{host}",
--    documentation="Counts Hermes reconnects to different ActiveMQ brokers",
-+    documentation="Counts Hermesk reconnects to different brokers",
-     labelnames=("host",),
- )
- 
-@@ -481,9 +482,9 @@
+@@ -517,7 +518,7 @@
      return 204
  
  
 -def hermes(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
 +def hermesk(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
      """
--    Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
-+    Creates a Hermesk Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ, Kafka)
+     Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
      The list of services need to be define in the config service in the hermes section.
-     The list of endpoints need to be defined in rucio.cfg in the hermes section.
- 
-@@ -547,6 +548,13 @@
+@@ -582,6 +583,13 @@
+                 )
          except Exception as err:
              logger(logging.ERROR, str(err))
- 
++
 +    message_filter = None
 +    if "kafka" in services_list:
 +       try:
 +           message_filter = setup_kafka(logger)
 +       except Exception as err:
 +           logging.exception(err)
-+
+ 
      worker_number, total_workers, logger = heartbeat_handler.live()
      message_dict = {}
-     message_ids = []
-@@ -558,6 +566,7 @@
-         total_threads=total_workers,
-     )
- 
-+    msg_num = 0
-     to_delete = []
-     if messages:
-         for message in messages:
-@@ -672,7 +681,26 @@
-                         to_delete.append(message)
+@@ -709,6 +717,25 @@
              except Exception as error:
                  logger(logging.ERROR, "Error sending to ActiveMQ : %s", str(error))
+ 
 +        if "kafka" in message_dict:
 +            t_time = time.time()
 +            try:
@@ -86,26 +61,13 @@
 +                        to_delete.append(message)
 +            except Exception as error:
 +                logger(logging.ERROR, "Error sending to Kafka : %s", str(error))
- 
 +
 +
      logger(logging.INFO, "Deleting %s messages", len(to_delete))
      to_delete = [
          {
-@@ -705,17 +733,17 @@
-     broker_timeout: int = 3,
- ) -> None:
-     """
--    Starts up the hermes threads.
-+    Starts up the hermesk threads.
-     """
-     setup_logging(process_name=DAEMON_NAME)
- 
-     if rucio.db.sqla.util.is_old_db():
-         raise DatabaseException("Database was not updated, daemon won't start")
- 
--    logging.info("starting hermes threads")
-+    logging.info("starting hermesk threads")
+@@ -751,7 +778,7 @@
+     logging.info("starting hermes threads")
      thread_list = [
          threading.Thread(
 -            target=hermes,
