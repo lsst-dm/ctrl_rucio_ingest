@@ -3,21 +3,25 @@ services:
   rucioclient:
     platform: linux/x86_64
     #image: docker.io/rucio/rucio-dev:latest-alma9
-    image: docker.io/rucio/rucio-dev:release-33.5.0
+    image: docker.io/rucio/rucio-dev:release-35.6.0
     entrypoint: ["/rucio_source/etc/docker/dev/rucio_entrypoint.sh"]
     command: ["sleep", "infinity"]
     profiles:
       - client
     volumes:
       - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
+      - ../../certs/rucio_ca.pem:/opt/rucio/etc/rucio_ca.pem:z
+      - ../../certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio_ca.pem:ro
       - ../../certs/hostcert_rucio.pem:/etc/grid-security/hostcert.pem:z
       - ../../certs/hostcert_rucio.key.pem:/etc/grid-security/hostkey.pem:z
-      - ../../certs/rucio_ca.pem:/opt/rucio/etc/rucio_ca.pem:z
       - ../../certs/ruciouser.pem:/opt/rucio/etc/usercert.pem:z
       - ../../certs/ruciouser.key.pem:/opt/rucio/etc/userkey.pem:z
+      #- ../../certs/ruciouser.pem:/tmp/usercert.pem:z
+      #- ../../certs/ruciouser.key.pem:/tmp/userkey.pem:z
       - ../../certs/ruciouser.certkey.pem:/opt/rucio/etc/usercertkey.pem:z
       - ../../certs/ssh/ruciouser_sshkey.pub:/root/.ssh/ruciouser_sshkey.pub:z
       - ../../certs/ssh/ruciouser_sshkey:/root/.ssh/ruciouser_sshkey:z
+      - ./rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ../../../tools:/opt/rucio/tools:Z
       - ../../../bin:/opt/rucio/bin:Z
       - ../../../lib:/opt/rucio/lib:Z
@@ -38,19 +42,23 @@ services:
   rucio:
     #image: docker.io/rucio/rucio-dev:latest-alma9
     platform: linux/x86_64
-    image: docker.io/rucio/rucio-dev:release-33.5.0
+    image: docker.io/rucio/rucio-dev:release-35.6.0
     # entrypoint: ["/rucio_source/etc/docker/dev/rucio_entrypoint.sh"]
     command: ["httpd","-D","FOREGROUND"]
     volumes:
       - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
+      - ../../certs/rucio_ca.pem:/opt/rucio/etc/rucio_ca.pem:z
+      - ../../certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio_ca.pem:ro
       - ../../certs/hostcert_rucio.pem:/etc/grid-security/hostcert.pem:z
       - ../../certs/hostcert_rucio.key.pem:/etc/grid-security/hostkey.pem:z
-      - ../../certs/rucio_ca.pem:/opt/rucio/etc/rucio_ca.pem:z
       - ../../certs/ruciouser.pem:/opt/rucio/etc/usercert.pem:z
       - ../../certs/ruciouser.key.pem:/opt/rucio/etc/userkey.pem:z
+      #- ../../certs/ruciouser.pem:/tmp/usercert.pem:z
+      #- ../../certs/ruciouser.key.pem:/tmp/userkey.pem:z
       - ../../certs/ruciouser.certkey.pem:/opt/rucio/etc/usercertkey.pem:z
       - ../../certs/ssh/ruciouser_sshkey.pub:/root/.ssh/ruciouser_sshkey.pub:z
       - ../../certs/ssh/ruciouser_sshkey:/root/.ssh/ruciouser_sshkey:z
+      - ./rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ../../../tools:/opt/rucio/tools:Z
       - ../../../bin:/opt/rucio/bin:Z
       - ../../../lib:/opt/rucio/lib:Z
@@ -58,16 +66,19 @@ services:
       - ../../../:/rucio_source:ro
       #- ../../../../modfiles/httpd.conf:/etc/httpd/conf/httpd.conf:z
       - ../../../../ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:z
-      - ../../../../ctrl_rucio_ingest/lib/rucio/common/schema/lsst.py:/opt/rucio/lib/rucio/common/schema/lsst.py:z
+      #- ../../../../ctrl_rucio_ingest/lib/rucio/common/schema/lsst.py:/opt/rucio/lib/rucio/common/schema/lsst.py:z
       - ../../../../ctrl_rucio_ingest/lib/rucio/common/constants.py:/opt/rucio/lib/rucio/common/constants.py:z
-      - ../../../../ctrl_rucio_ingest/lib/rucio/rse/protocols/protocol.py:/opt/rucio/lib/rucio/rse/protocols/protocol.py:z
+      #- ../../../../ctrl_rucio_ingest/lib/rucio/rse/protocols/protocol.py:/opt/rucio/lib/rucio/rse/protocols/protocol.py:z
+      - ../../../../ctrl_rucio_ingest/tools/alembic_migration.sh:/opt/rucio/tools/alembic_migration.sh:z
       - ../../../../test_data:/opt/rucio/test_data
       - ../../../../disks:/rucio/disks
+      - ../../../../RubinRucioPolicy:/opt/permissions/rubin
     environment:
-      - PYTHONPATH=${PYTHONPATH}:/opt/permissions/rubin
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+      - PYTHONPATH=${PYTHONPATH}:/opt/permissions:/opt/permissions/rubin
       - RUCIO_SOURCE_DIR=/rucio_source
-      - X509_USER_CERT=/opt/rucio/etc/usercert.pem
-      - X509_USER_KEY=/opt/rucio/etc/userkey.pem
+      ##- X509_USER_CERT=/opt/rucio/etc/usercert.pem
+      ##- X509_USER_KEY=/opt/rucio/etc/userkey.pem
       - RDBMS
   ruciodb:
     platform: linux/x86_64
@@ -90,7 +101,7 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=rucio
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=mytoken
   elasticsearch:
-    image: docker.io/elasticsearch:7.4.0
+    image: docker.io/elasticsearch:7.8.0
     environment:
       - discovery.type=single-node
   activemq:
@@ -115,7 +126,7 @@ services:
       - POSTGRES_PASSWORD=rucio
     command: ["-c", "fsync=off","-c", "synchronous_commit=off","-c", "full_page_writes=off"]
   mysql8:
-    image: docker.io/mysql:8
+    image: docker.io/mysql:8.3
     profiles:
       - mysql8
     environment:
@@ -143,7 +154,7 @@ services:
   fts:
     #image: docker.io/rucio/fts
     platform: linux/x86_64
-    image: docker.io/rucio/fts:33.5.0
+    image: docker.io/rucio/fts:35.6.0
     profiles:
       - storage
     volumes:
@@ -156,7 +167,7 @@ services:
         hard: 10240
   ftsdb:
     platform: linux/x86_64
-    image: docker.io/mysql:8
+    image: docker.io/mysql:8.3
     profiles:
       - storage
     command: --default-authentication-plugin=mysql_native_password
@@ -168,7 +179,7 @@ services:
   xrd1:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:33.5.0
+    image: docker.io/rucio/xrootd:35.6.0
     profiles:
       - storage
     environment:
@@ -185,7 +196,7 @@ services:
   xrd2:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:33.5.0
+    image: docker.io/rucio/xrootd:35.6.0
     profiles:
       - storage
     environment:
@@ -202,7 +213,7 @@ services:
   xrd3:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:33.5.0
+    image: docker.io/rucio/xrootd:35.6.0
     profiles:
       - storage
     environment:
@@ -211,7 +222,7 @@ services:
       - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
       - ../../certs/hostcert_xrd3.pem:/tmp/xrdcert.pem:Z
       - ../../certs/hostcert_xrd3.key.pem:/tmp/xrdkey.pem:Z
-      - ../../../../disks/xrd3/rucio:/rucio
+      - /Users/srp/work/disks/xrd3/rucio:/rucio
     ulimits:
       nofile:
         soft: 10240
@@ -219,7 +230,7 @@ services:
   xrd4:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:33.5.0
+    image: docker.io/rucio/xrootd:35.6.0
     profiles:
       - storage
     environment:
@@ -233,6 +244,42 @@ services:
       nofile:
         soft: 10240
         hard: 10240
+  xrd5:
+    image: docker.io/rucio/xrootd:35.6.0
+    profiles:
+      - storage
+    environment:
+      - XRDHOST=xrd5
+      - XRDPORT=1098
+      - QBITTORRENT_UI_USERNAME=rucio
+      - QBITTORRENT_UI_PASSWORD=rucio90df
+      - QBITTORRENT_UI_PORT=8098
+      - QBITTORRENT_LISTEN_PORT=10000
+    volumes:
+      - ./xrd/entrypoint.sh:/docker-entrypoint.sh:ro
+      - ./xrd:/configs:ro
+      - ./configure_qbittorrent.py:/configure_qbittorrent.py:ro
+      - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
+      - ../../certs/hostcert_xrd5.pem:/tmp/xrdcert.pem:Z
+      - ../../certs/hostcert_xrd5.key.pem:/tmp/xrdkey.pem:Z
+    ulimits:
+      nofile:
+        soft: 10240
+        hard: 10240
+  web1:
+    image: rucio/webdav
+    environment:
+      - QBITTORRENT_UI_USERNAME=rucio
+      - QBITTORRENT_UI_PASSWORD=rucio90df
+      - QBITTORRENT_UI_PORT=8099
+      - QBITTORRENT_LISTEN_PORT=10000
+    volumes:
+      - ./web1/entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ./configure_qbittorrent.py:/configure_qbittorrent.py:ro
+      - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ../../certs/hostcert_web1.key.pem:/etc/grid-security/hostkey.pem:ro
+      - ../../certs/hostcert_web1.pem:/etc/grid-security/hostcert.pem:Z
+      - ./web1/default-ssl.conf:/etc/apache2/sites-available/default-ssl.conf
   minio:
     image: docker.io/minio/minio
     profiles:
@@ -376,45 +423,61 @@ services:
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
       CONFLUENT_METRICS_ENABLE: 'true'
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+      KAFKA_ALLOW_AUTO_CREATE_TOPICS: 'true'
     volumes:
       - ../../../../test_data:/opt/rucio/test_data
   testenv-ingestd:
-    image: testenv-ingestd:1.1
+    image: testenv-ingestd:1.2_test
     profiles:
       - kafka
     environment:
-      CTRL_INGESTD_CONFIG: /home/lsst/ctrl_ingestd/etc/ingestd.yml
+      CTRL_INGESTD_CONFIG: /home/lsst/ctrl_ingestd/etc/ingestd2.yml
     #network_mode: "service:rucio"
     volumes:
       - /tmp/ingestd:/tmp/
       - ../../../../disks:/rucio/disks
-      - ../../../../ctrl_ingestd:/home/lsst/ctrl_ingestd
-      - ../../../../tmp_new:/home/lsst/tmp_new
+      - /Users/srp/work:/home/lsst/ctrl_ingestd
+      - /Users/srp/work/embargo-butler:/home/lsst/embargo-butler
+      - /Users/srp/work/tmp_new:/home/lsst/tmp_new
+      - /Users/srp/work/tmp_test:/home/lsst/tmp_test
       - ../../../../test_data:/home/lsst/test_data
     command: ["tail", "-f", "/dev/null"]
+  ingestd:
+    image: ghcr.io/lsst-dm/ctrl_ingestd:1.1
+    profiles:
+      - kafka_PRODUCTION
+    environment:
+      CTRL_INGESTD_CONFIG: /home/lsst/ctrl_ingestd/etc/ingestd.yml
+    volumes:
+      - /tmp/ingestd:/tmp/
+      - ../../../../disks:/rucio/disks
+      - /Users/srp/work/tmp_test:/home/lsst/tmp_test
+      - /Users/srp/work/ctrl_ingestd/etc/ingestd2.yml:/home/lsst/ctrl_ingestd/etc/ingestd.yml:z
+      - /Users/srp/work/test_data:/home/lsst/test_data
   test-register:
     container_name: test-register
     image: test-register
     volumes:
       - /tmp/register:/tmp/
       - ../../../../disks:/rucio/disks
-      - ../../../../dm_rucio_register:/home/lsst/dm_rucio_register
+      - ../../../../rucio_register:/home/lsst/rucio_register
       - ../../../../ctrl_ingestd:/home/lsst/ctrl_ingestd
       - ../../../../embargo-butler:/home/lsst/embargo-butler
       - ../../../../tmp_new:/home/lsst/tmp_new
       - ../../../../test_data:/home/lsst/test_data
       - ../../../../rucio_sup:/home/lsst/rucio_sup
-      - ../../ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:z
+      - /Users/srp/work/ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:z
       - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
       - ../../certs/hostcert_rucio.pem:/etc/grid-security/hostcert.pem:z
       - ../../certs/hostcert_rucio.key.pem:/etc/grid-security/hostkey.pem:z
       - ../../certs/rucio_ca.pem:/opt/rucio/etc/rucio_ca.pem:z
-      - ../../certs/ruciouser.pem:/opt/rucio/etc/usercert.pem:z
-      - ../../certs/ruciouser.key.pem:/opt/rucio/etc/userkey.pem:z
+      #- ../../certs/ruciouser.pem:/opt/rucio/etc/usercert.pem:z
+      #- ../../certs/ruciouser.key.pem:/opt/rucio/etc/userkey.pem:z
+      - ../../certs/ruciouser.pem:/tmp/usercert.pem:z
+      - ../../certs/ruciouser.key.pem:/tmp/userkey.pem:z
       - ../../certs/ruciouser.certkey.pem:/opt/rucio/etc/usercertkey.pem:z
       - ../../certs/ssh/ruciouser_sshkey.pub:/root/.ssh/ruciouser_sshkey.pub:z
       - ../../certs/ssh/ruciouser_sshkey:/root/.ssh/ruciouser_sshkey:z
-      - ../../../../ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:z
       - ../../../../../.exrc:/opt/rucio/.exrc:z
   kafdrop:
     image: obsidiandynamics/kafdrop:latest
@@ -427,14 +490,17 @@ services:
       SERVER_PORT: 9550
       MANAGEMENT_SERVER_PORT: 9550
   hermesk:
-    image: rucio-daemons-hermesk:33.5.0.1
+    image: rucio-daemons-hermesk:latest
+    #image: ghcr.io/lsst-dm/rucio-daemons-hermesk:35.6.0.1
     profiles:
       - kafka
     environment:
+      - PYTHONPATH=${PYTHONPATH}:/opt/permissions
       - RUCIO_DAEMON=hermesk
     volumes:
       - ../../../../ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:Z
       - ../../../../rucio/etc/certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:Z
       - ../../../:/rucio_source:ro
+      - ../../../../RubinRucioPolicy:/opt/permissions/rubin
     #entrypoint: ["/rucio_source/etc/docker/dev/rucio_entrypoint.sh"]
     #command: ["sleep", "infinity"]
