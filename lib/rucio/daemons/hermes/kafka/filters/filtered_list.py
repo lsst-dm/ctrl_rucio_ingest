@@ -58,7 +58,11 @@ class filtered_list(default):
                 continue
             try:
                 # get the destination RSE
-                destination = str(message['payload'].get('dst-rse'))
+                dst_rse = str(message['payload'].get('dst-rse'))
+                scope = str(message['payload'].get('scope'))
+
+                # create Kakfa topic 
+                destination = f"{dst_rse}-{scope}"
 
                 # check to see if the destination RSE is in the list
                 # of topics we're filtering.  If it's not in the list
@@ -73,7 +77,6 @@ class filtered_list(default):
                         continue
 
                 # get the metadata for this file
-                scope = str(message['payload'].get('scope'))
                 name = str(message['payload'].get('name'))
                 metadata = self.client.get_metadata(plugin='ALL', scope=scope, name=name)
                 self.logger(logging.INFO, f"name and metadata: {name}: {metadata}")
