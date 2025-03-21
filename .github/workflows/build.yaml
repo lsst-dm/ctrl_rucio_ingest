@@ -1,4 +1,4 @@
-name: Build Rucio/Butler ingestd container
+name: Build Rucio HermesK container
 on:
   push:
     tags:
