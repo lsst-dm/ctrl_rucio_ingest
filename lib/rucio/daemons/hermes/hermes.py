@@ -114,10 +114,7 @@ def setup_activemq(
     brokers_alias = []
     brokers_resolved = []
     try:
-        brokers_alias = [
-            broker.strip()
-            for broker in config_get("messaging-hermes", "brokers").split(",")
-        ]
+        brokers_alias = config_get_list("messaging-hermes", "brokers")
     except:
         raise Exception("Could not load brokers from configuration")
 
@@ -408,7 +405,7 @@ def submit_to_elastic(
 
 def aggregate_to_influx(
     messages: "Iterable[dict[str, Any]]",
-    bin_size: int,
+    bin_size: str,
     endpoint: str,
     logger: "LoggerFunction"
 ) -> int:
@@ -517,6 +514,69 @@ def aggregate_to_influx(
     return 204
 
 
+def build_message_dict(
+        bulk: int,
+        thread: int,
+        total_threads: int,
+        message_dict: dict[str, list[dict[str, Any]]],
+        logger: "LoggerFunction",
+        service: Optional[str] = None,
+) -> None:
+    """
+    Retrieves messages from the database and builds a dictionary with the keys being the services, and the values a list of the messages (built up of dictionary / json information)
+
+    :param bulk:               Integer for number of messages to retrieve.
+    :param thread:             Passed to thread in retrieve_messages for Identifier of the caller thread as an integer.
+    :param total_threads:      Passed to total_threads for Maximum number of threads as an integer.
+    :param message_dict:       Either empty dictionary to be built, or build upon when using query_by_service.
+    :param logger:             The logger object.
+    :param service:            When passed, only returns messages table for this specific service.
+
+    :returns:                  None, but builds on the dictionary message_dict passed to this fuction (for when querying multiple services).
+    """
+    start_time = time.time()
+    messages = retrieve_messages(
+        bulk=bulk,
+        old_mode=False,
+        thread=thread,
+        total_threads=total_threads,
+        service_filter=service,
+    )
+
+    if messages:
+        if service is not None:
+            # query_by_service dictionary build behaviour
+            message_dict[service] = messages.copy()
+            logger(
+                logging.DEBUG,
+                "Retrieved %i messages retrieved in %s seconds for %s service.",
+                len(messages),
+                time.time() - start_time,
+                service,
+            )
+
+        else:
+            # default dictionary build behaviour
+            for message in messages:
+                service = message["services"]
+                if service is not None:
+                    if service not in message_dict:
+                        message_dict[service] = []
+                    message_dict[service].append(message)
+        logger(
+            logging.DEBUG,
+            "Retrieved %i messages retrieved in %s seconds",
+            len(messages),
+            time.time() - start_time,
+        )
+    else:
+        logger(
+            logging.INFO,
+            "No messages retrieved in %s seconds",
+            time.time() - start_time,
+        )
+
+
 def hermes(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
     """
     Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
@@ -571,7 +631,6 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                 )
         except Exception as err:
             logger(logging.ERROR, str(err))
-    conns = None
     if "activemq" in services_list:
         try:
             conns, destination, username, password, use_ssl = setup_activemq(logger)
@@ -585,29 +644,30 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
 
     worker_number, total_workers, logger = heartbeat_handler.live()
     message_dict = {}
-    message_ids = []
-    start_time = time.time()
-    messages = retrieve_messages(
-        bulk=bulk,
-        old_mode=False,
-        thread=worker_number,
-        total_threads=total_workers,
-    )
+    query_by_service = config_get_bool("hermes", "query_by_service", default=False)
 
-    to_delete = []
-    if messages:
-        for message in messages:
-            service = message["services"]
-            if service not in message_dict:
-                message_dict[service] = []
-            message_dict[service].append(message)
-            message_ids.append(message["id"])
-        logger(
-            logging.DEBUG,
-            "Retrieved %i messages retrieved in %s seconds",
-            len(messages),
-            time.time() - start_time,
+    # query_by_service is a toggleable behaviour switch between collecting bulk number of messages across all services when false, to collecting bulk messages from each service when true.
+    if query_by_service:
+        for service in services_list:
+            build_message_dict(
+                bulk=bulk,
+                thread=worker_number,
+                total_threads=total_workers,
+                message_dict=message_dict,
+                logger=logger,
+                service=service,
+            )
+    else:
+        build_message_dict(
+            bulk=bulk,
+            thread=worker_number,
+            total_threads=total_workers,
+            message_dict=message_dict,
+            logger=logger
         )
+
+    if message_dict:
+        to_delete = []
 
         if "influx" in message_dict and influx_endpoint:
             # For influxDB, bulk submission, either everything succeeds or fails
@@ -685,12 +745,12 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             except Exception as error:
                 logger(logging.ERROR, "Error sending email : %s", str(error))
 
-        if "activemq" in message_dict and conns:
+        if "activemq" in message_dict:
             t_time = time.time()
             try:
                 messages_sent = deliver_to_activemq(
                     messages=message_dict["activemq"],
-                    conns=conns,
+                    conns=conns,  # type: ignore (argument could be None)
                     destination=destination,  # type: ignore (argument could be None)
                     username=username,  # type: ignore (argument could be None)
                     password=password,  # type: ignore (argument could be None)
@@ -717,6 +777,7 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             "updated_at": message["created_at"],
             "payload": str(message["payload"]),
             "event_type": message["event_type"],
+            "services": message["services"]
         }
         for message in to_delete
     ]

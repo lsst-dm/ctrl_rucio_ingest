@@ -1,9 +1,8 @@
-version: "3"
 services:
   rucioclient:
     platform: linux/x86_64
     #image: docker.io/rucio/rucio-dev:latest-alma9
-    image: docker.io/rucio/rucio-dev:release-35.6.0
+    image: docker.io/rucio/rucio-dev:release-37.2.0
     entrypoint: ["/rucio_source/etc/docker/dev/rucio_entrypoint.sh"]
     command: ["sleep", "infinity"]
     profiles:
@@ -42,7 +41,7 @@ services:
   rucio:
     #image: docker.io/rucio/rucio-dev:latest-alma9
     platform: linux/x86_64
-    image: docker.io/rucio/rucio-dev:release-35.6.0
+    image: docker.io/rucio/rucio-dev:release-37.2.0
     # entrypoint: ["/rucio_source/etc/docker/dev/rucio_entrypoint.sh"]
     command: ["httpd","-D","FOREGROUND"]
     volumes:
@@ -153,8 +152,8 @@ services:
       - ./oracle_setup.sh:/container-entrypoint-initdb.d/oracle_setup.sh:Z
   fts:
     #image: docker.io/rucio/fts
-    platform: linux/x86_64
-    image: docker.io/rucio/fts:35.6.0
+    platform: linux/amd64
+    image: docker.io/rucio/test-fts:37.2.0
     profiles:
       - storage
     volumes:
@@ -179,7 +178,7 @@ services:
   xrd1:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:35.6.0
+    image: docker.io/rucio/test-xrootd:37.2.0
     profiles:
       - storage
     environment:
@@ -196,7 +195,7 @@ services:
   xrd2:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:35.6.0
+    image: docker.io/rucio/test-xrootd:37.2.0
     profiles:
       - storage
     environment:
@@ -213,7 +212,7 @@ services:
   xrd3:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:35.6.0
+    image: docker.io/rucio/test-xrootd:37.2.0
     profiles:
       - storage
     environment:
@@ -230,7 +229,7 @@ services:
   xrd4:
     #image: docker.io/rucio/xrootd
     platform: linux/x86_64
-    image: docker.io/rucio/xrootd:35.6.0
+    image: docker.io/rucio/test-xrootd:37.2.0
     profiles:
       - storage
     environment:
@@ -245,7 +244,7 @@ services:
         soft: 10240
         hard: 10240
   xrd5:
-    image: docker.io/rucio/xrootd:35.6.0
+    image: docker.io/rucio/test-xrootd:37.2.0
     profiles:
       - storage
     environment:
@@ -427,7 +426,8 @@ services:
     volumes:
       - ../../../../test_data:/opt/rucio/test_data
   testenv-ingestd:
-    image: testenv-ingestd:1.2_test
+    image: testenv-ingestd:latest
+    platform: linux/arm64
     profiles:
       - kafka
     environment:
@@ -443,7 +443,7 @@ services:
       - ../../../../test_data:/home/lsst/test_data
     command: ["tail", "-f", "/dev/null"]
   ingestd:
-    image: ghcr.io/lsst-dm/ctrl_ingestd:1.1
+    image: ghcr.io/lsst-dm/ctrl_ingestd:1.5
     profiles:
       - kafka_PRODUCTION
     environment:
@@ -466,7 +466,9 @@ services:
       - ../../../../tmp_new:/home/lsst/tmp_new
       - ../../../../test_data:/home/lsst/test_data
       - ../../../../rucio_sup:/home/lsst/rucio_sup
-      - /Users/srp/work/ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:z
+      - type: bind
+        source: /Users/srp/work/ctrl_rucio_ingest/etc/rucio.cfg
+        target: /opt/rucio/etc/rucio.cfg
       - ../../certs/rucio_ca.pem:/etc/grid-security/certificates/5fca1cb1.0:z
       - ../../certs/hostcert_rucio.pem:/etc/grid-security/hostcert.pem:z
       - ../../certs/hostcert_rucio.key.pem:/etc/grid-security/hostkey.pem:z
@@ -495,7 +497,7 @@ services:
     profiles:
       - kafka
     environment:
-      - PYTHONPATH=${PYTHONPATH}:/opt/permissions
+      - PYTHONPATH=${PYTHONPATH}:/opt/permissions:/opt/permissions/rubin
       - RUCIO_DAEMON=hermesk
     volumes:
       - ../../../../ctrl_rucio_ingest/etc/rucio.cfg:/opt/rucio/etc/rucio.cfg:Z

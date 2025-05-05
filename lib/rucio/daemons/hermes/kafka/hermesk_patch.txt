@@ -1,5 +1,5 @@
---- hermes.py	2024-10-04 11:48:58
-+++ hermesk.py	2024-10-02 17:29:14
+--- hermes.py	2025-05-02 14:46:50
++++ hermesk.py	2025-05-02 14:45:41
 @@ -48,6 +48,7 @@
  from rucio.core.message import delete_messages, retrieve_messages
  from rucio.core.monitor import MetricManager
@@ -17,8 +17,8 @@
  
  RECONNECT_COUNTER = METRICS.counter(
      name="reconnect.{host}",
-@@ -517,7 +518,7 @@
-     return 204
+@@ -577,7 +578,7 @@
+         )
  
  
 -def hermes(once: bool = False, bulk: int = 1000, sleep_time: int = 10) -> None:
@@ -26,24 +26,35 @@
      """
      Creates a Hermes Worker that can submit messages to different services (InfluXDB, ElasticSearch, ActiveMQ)
      The list of services need to be define in the config service in the hermes section.
-@@ -582,6 +583,13 @@
-                 )
+@@ -642,6 +643,13 @@
          except Exception as err:
              logger(logging.ERROR, str(err))
-+
+ 
 +    message_filter = None
 +    if "kafka" in services_list:
 +       try:
 +           message_filter = setup_kafka(logger)
 +       except Exception as err:
 +           logging.exception(err)
- 
++
      worker_number, total_workers, logger = heartbeat_handler.live()
      message_dict = {}
-@@ -709,6 +717,25 @@
+     query_by_service = config_get_bool("hermes", "query_by_service", default=False)
+@@ -666,8 +674,8 @@
+             logger=logger
+         )
+ 
++    to_delete = []
+     if message_dict:
+-        to_delete = []
+ 
+         if "influx" in message_dict and influx_endpoint:
+             # For influxDB, bulk submission, either everything succeeds or fails
+@@ -768,6 +776,24 @@
+                         to_delete.append(message)
              except Exception as error:
                  logger(logging.ERROR, "Error sending to ActiveMQ : %s", str(error))
- 
++
 +        if "kafka" in message_dict:
 +            t_time = time.time()
 +            try:
@@ -61,12 +72,10 @@
 +                        to_delete.append(message)
 +            except Exception as error:
 +                logger(logging.ERROR, "Error sending to Kafka : %s", str(error))
-+
-+
+ 
      logger(logging.INFO, "Deleting %s messages", len(to_delete))
      to_delete = [
-         {
-@@ -751,7 +778,7 @@
+@@ -812,7 +838,7 @@
      logging.info("starting hermes threads")
      thread_list = [
          threading.Thread(
