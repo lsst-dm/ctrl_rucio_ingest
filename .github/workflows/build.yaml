@@ -2,7 +2,7 @@ name: Build Rucio HermesK container
 on:
   push:
     tags:
-    - v*
+    - '**'
   pull_request:
 
 env:
@@ -18,6 +18,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
 
+    - name: Set tag-based Docker tag
+      id: tag
+      run: |
+        GIT_TAG="${GITHUB_REF_NAME}"
+        VERSION=$(echo "$GIT_TAG" | sed 's#[^a-zA-Z0-9_.-]#-#g')
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+
+    - name: Echo the Docker tag name
+      run: |
+         echo "Docker image will be tagged as ${VERSION}"
+
     - name: Build ingest image
       working-directory: docker
       run: |
@@ -31,7 +43,6 @@ jobs:
         HERMESK_ID=ghcr.io/${{ github.repository_owner }}/$HERMESK_NAME
 
         # Strip git ref prefix from version
-        VERSION=$(cat docker/versions.env | grep RUCIO_DAEMONS_HERMESK_VERSION | sed 's/=/ /g'|cut -d " " -f2)
         echo HERMESK_ID=$HERMESK_ID
         echo VERSION=$VERSION
         docker tag $HERMESK_NAME $HERMESK_ID:$VERSION
