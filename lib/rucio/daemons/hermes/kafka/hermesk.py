@@ -25,6 +25,7 @@ import random
 import re
 import smtplib
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -116,7 +117,7 @@ def setup_activemq(
     brokers_resolved = []
     try:
         brokers_alias = config_get_list("messaging-hermes", "brokers")
-    except:
+    except Exception:
         raise Exception("Could not load brokers from configuration")
 
     logger(logging.INFO, "[broker] Resolving broker dns alias: %s", brokers_alias)
@@ -149,7 +150,7 @@ def setup_activemq(
     use_ssl = True
     try:
         use_ssl = config_get_bool("messaging-hermes", "use_ssl")
-    except:
+    except Exception:
         logger(
             logging.INFO,
             "[broker] Could not find use_ssl in configuration -- please update your rucio.cfg",
@@ -344,6 +345,14 @@ def deliver_emails(
     :returns:                  List of message_id to delete
     """
 
+    smtp_host = config_get("messaging-hermes", "smtp_host", default='')
+    smtp_port = config_get_int("messaging-hermes", "smtp_port", default=25)
+    smtp_username = config_get("messaging-hermes", "smtp_username", default='')
+    smtp_password = config_get("messaging-hermes", "smtp_password", default='')
+    smtp_certfile = config_get("messaging-hermes", "smtp_certfile", default='')
+    smtp_keyfile = config_get("messaging-hermes", "smtp_keyfile", default='')
+    smtp_usessl = config_get_bool("messaging-hermes", "smtp_usessl", default=False)
+    smtp_usetls = config_get_bool("messaging-hermes", "smtp_usetls", default=False)
     email_from = config_get("messaging-hermes", "email_from")
     send_email = config_get_bool(
         "messaging-hermes", "send_email", raise_exception=False, default=True
@@ -358,12 +367,33 @@ def deliver_emails(
 
             try:
                 if send_email:
-                    smtp = smtplib.SMTP()
-                    smtp.connect()
-                    smtp.sendmail(
-                        msg["From"], message["payload"]["to"], msg.as_string()
-                    )
-                    smtp.quit()
+                    # Fall back to unauthenticated connection if no host is provided
+                    if not smtp_host:
+                        smtp = smtplib.SMTP()
+                        smtp.connect()
+                        smtp.sendmail(
+                            msg["From"], message["payload"]["to"], msg.as_string()
+                        )
+                        smtp.quit()
+                    else:
+                        ssl_context = None
+                        if smtp_certfile and smtp_keyfile:
+                            ssl_context = ssl.create_default_context()
+                            ssl_context.load_cert_chain(certfile=smtp_certfile, keyfile=smtp_keyfile)
+
+                        smtp_context = smtplib.SMTP(host=smtp_host, port=smtp_port)
+                        if not smtp_usetls and smtp_usessl:
+                            smtp_context = smtplib.SMTP_SSL(host=smtp_host, port=smtp_port, context=ssl_context)
+
+                        with smtp_context as smtp_server:
+                            if smtp_usetls:
+                                smtp_server.ehlo()  # not strictly necessary
+                                smtp_server.starttls(context=ssl_context)
+                            if smtp_username and smtp_password:
+                                smtp_server.login(smtp_username, smtp_password)
+                            smtp_server.sendmail(
+                                msg["From"], message["payload"]["to"], msg.as_string()
+                            )
                 to_delete.append(message["id"])
             except Exception as error:
                 logger(logging.ERROR, "Cannot send email : %s", str(error))

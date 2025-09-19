@@ -1,5 +1,3 @@
-version: "3.7"
-
 services:
   rucio-daemons-hermesk:
     container_name: rucio-daemons-hermesk
