@@ -33,7 +33,7 @@ jobs:
     - name: Build ingest image
       working-directory: docker
       run: |
-        docker compose -f "docker-compose.yml" --env-file versions.env build $HERMESK_NAME
+        docker compose -f "docker-compose.yml" build $HERMESK_NAME
 
     - name: Log in to GitHub Container Registry 
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
