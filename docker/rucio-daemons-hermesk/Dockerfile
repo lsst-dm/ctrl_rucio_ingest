@@ -1,8 +1,8 @@
-ARG RUCIO_DAEMONS_VERSION
-FROM rucio/rucio-daemons:${RUCIO_DAEMONS_VERSION}
+ARG RUCIO_DAEMONS_VERSION=release-38.2.0
+FROM rucio/rucio-daemons:release-38.2.0
 
 ARG CONFLUENT_KAFKA_VERSION
-RUN pip install confluent_kafka==${CONFLUENT_KAFKA_VERSION}
+RUN pip install confluent_kafka==2.2.0
 RUN pip install retrying
 
 RUN mkdir -p /etc/grid-security/certificates
