@@ -21,6 +21,7 @@ import datetime
 import functools
 import json
 import logging
+import logging.handlers
 import random
 import re
 import smtplib
@@ -403,6 +404,87 @@ def deliver_emails(
     return to_delete
 
 
+def deliver_to_syslog(
+        messages: "Iterable[dict[str, Any]]",
+        logger: "LoggerFunction"
+) -> list[str]:
+    """
+    Delivers messages to syslog
+
+    :param messages:           The list of messages.
+    :param logger:             The logger object.
+
+    :returns:                  List of message_id to delete
+    """
+    syslog_address = config_get("messaging-hermes", "syslog_address", default='/dev/log')
+    syslog_socktype_str = config_get("messaging-hermes", "syslog_socktype", default='SOCK_DGRAM')
+
+    socktype = socket.SOCK_DGRAM
+    if syslog_socktype_str.upper() == 'SOCK_STREAM':
+        socktype = socket.SOCK_STREAM
+
+    # Parse address - can be '/dev/log' or 'host:port'
+    if ':' in syslog_address:
+        host, port = syslog_address.rsplit(':', 1)
+        address = (host, int(port))
+    else:
+        address = syslog_address
+
+    to_delete = []
+
+    try:
+        syslog_handler = logging.handlers.SysLogHandler(
+            address=address,
+            facility=logging.handlers.SysLogHandler.LOG_USER,
+            socktype=socktype
+        )
+
+        syslog_logger = logging.getLogger('rucio.hermes.syslog')
+        syslog_logger.setLevel(logging.INFO)
+        syslog_logger.handlers = []
+        syslog_logger.addHandler(syslog_handler)
+        syslog_logger.propagate = False
+
+        for message in messages:
+            try:
+                log_message = json.dumps({
+                    'event_type': str(message['event_type']).lower(),
+                    'payload': message['payload'],
+                    'created_at': str(message['created_at'])
+                }, default=default)
+
+                syslog_logger.info("Sending message: %s", log_message)
+                to_delete.append(message['id'])
+
+            except ValueError:
+                logger(
+                    logging.ERROR,
+                    "[syslog] Cannot serialize payload to JSON: %s",
+                    str(message['payload'])
+                )
+                to_delete.append(message['id'])
+                continue
+            except Exception as error:
+                logger(
+                    logging.ERROR,
+                    "[syslog] Could not deliver message: %s",
+                    str(error)
+                )
+                continue
+
+        syslog_handler.close()
+        syslog_logger.removeHandler(syslog_handler)
+
+    except Exception as error:
+        logger(
+            logging.ERROR,
+            "[syslog] Could not setup syslog handler: %s",
+            str(error)
+        )
+
+    return to_delete
+
+
 def submit_to_elastic(
         messages: "Iterable[dict[str, Any]]",
         endpoint: str,
@@ -672,6 +754,8 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
                 )
         except Exception as err:
             logger(logging.ERROR, str(err))
+    if "syslog" in services_list:
+        logger(logging.INFO, "Syslog service enabled")
 
     message_filter = None
     if "kafka" in services_list:
@@ -704,8 +788,8 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             logger=logger
         )
 
-    to_delete = []
     if message_dict:
+        to_delete = []
 
         if "influx" in message_dict and influx_endpoint:
             # For influxDB, bulk submission, either everything succeeds or fails
@@ -807,6 +891,25 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             except Exception as error:
                 logger(logging.ERROR, "Error sending to ActiveMQ : %s", str(error))
 
+        if "syslog" in services_list and "syslog" in message_dict:
+            t_time = time.time()
+            try:
+                messages_sent = deliver_to_syslog(
+                    messages=message_dict["syslog"],
+                    logger=logger
+                )
+                logger(
+                    logging.INFO,
+                    "%s messages successfully submitted to syslog in %s seconds",
+                    len(message_dict["syslog"]),
+                    time.time() - t_time,
+                )
+                for message in message_dict["syslog"]:
+                    if message["id"] in messages_sent:
+                        to_delete.append(message)
+            except Exception as error:
+                logger(logging.ERROR, "Error sending to syslog : %s", str(error))
+
         if "kafka" in message_dict:
             t_time = time.time()
             try:
@@ -825,19 +928,20 @@ def run_once(heartbeat_handler: "HeartbeatHandler", bulk: int, **_kwargs) -> boo
             except Exception as error:
                 logger(logging.ERROR, "Error sending to Kafka : %s", str(error))
 
-    logger(logging.INFO, "Deleting %s messages", len(to_delete))
-    to_delete = [
-        {
-            "id": message["id"],
-            "created_at": message["created_at"],
-            "updated_at": message["created_at"],
-            "payload": str(message["payload"]),
-            "event_type": message["event_type"],
-            "services": message["services"]
-        }
-        for message in to_delete
-    ]
-    delete_messages(messages=to_delete)
+        logger(logging.INFO, "Deleting %s messages", len(to_delete))
+        to_delete = [
+            {
+                "id": message["id"],
+                "created_at": message["created_at"],
+                "updated_at": message["created_at"],
+                "payload": str(message["payload"]),
+                "event_type": message["event_type"],
+                "services": message["services"]
+            }
+            for message in to_delete
+        ]
+        delete_messages(messages=to_delete)
+
     must_sleep = True
     return must_sleep
 
