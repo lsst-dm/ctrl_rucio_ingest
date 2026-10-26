@@ -1,5 +1,5 @@
-ARG RUCIO_DAEMONS_VERSION=release-41.2.2
-FROM rucio/rucio-daemons:release-41.2.2
+ARG RUCIO_DAEMONS_VERSION=release-41.5.1
+FROM rucio/rucio-daemons:release-41.5.1
 
 ARG CONFLUENT_KAFKA_VERSION
 RUN pip install confluent_kafka==2.2.0
